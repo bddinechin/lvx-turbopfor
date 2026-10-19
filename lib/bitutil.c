@@ -848,36 +848,36 @@ uint64_t bitfm64(uint64_t *in, unsigned n, uint64_t  *px, uint64_t *pmin) { uint
 //---------------------- any esize ----------------------------------
 void bitxenc(unsigned char *in, unsigned n, unsigned char *out, unsigned esize) {
   switch(esize) {
-    case 2 : bitxenc16(in, n/2, out, 0); break;
-    case 4 : bitxenc32(in, n/4, out, 0); break;
-    case 8 : bitxenc64(in, n/8, out, 0); break;
+    case 2 : bitxenc16((uint16_t *)in, n/2, (uint16_t *)out, 0); break;
+    case 4 : bitxenc32((uint32_t *)in, n/4, (uint32_t *)out, 0); break;
+    case 8 : bitxenc64((uint64_t *)in, n/8, (uint64_t *)out, 0); break;
     default: bitxenc8( in, n/1, out, 0); break;
   }
 }
 
 void bitxdec(unsigned char *in, unsigned n, unsigned esize) {
   switch(esize) {
-    case 2 : bitxdec16(in, n/2, 0);break;
-    case 4 : bitxdec32(in, n/4, 0);break;
-    case 8 : bitxdec64(in, n/8, 0);break;
+    case 2 : bitxdec16((uint16_t *)in, n/2, 0);break;
+    case 4 : bitxdec32((uint32_t *)in, n/4, 0);break;
+    case 8 : bitxdec64((uint64_t *)in, n/8, 0);break;
     default: bitxdec8( in, n/1, 0);break;
   }
 }
 
 void bitzenc(unsigned char *in, unsigned n, unsigned char *out, unsigned esize) {
   switch(esize) {
-    case 2 : bitzenc16(in, n/2, out, 0, 0); break;
-    case 4 : bitzenc32(in, n/4, out, 0, 0); break;
-    case 8 : bitzenc64(in, n/8, out, 0, 0); break;
+    case 2 : bitzenc16((uint16_t *)in, n/2, (uint16_t *)out, 0, 0); break;
+    case 4 : bitzenc32((uint32_t *)in, n/4, (uint32_t *)out, 0, 0); break;
+    case 8 : bitzenc64((uint64_t *)in, n/8, (uint64_t *)out, 0, 0); break;
     default: bitzenc8( in, n/1, out, 0, 0); break;
   }
 }
 
 void bitzdec(unsigned char *in, unsigned n, unsigned esize) {
   switch(esize) {
-    case 2 : bitzdec16(in, n/2, 0);break;
-    case 4 : bitzdec32(in, n/4, 0);break;
-    case 8 : bitzdec64(in, n/8, 0);break;
+    case 2 : bitzdec16((uint16_t *)in, n/2, 0);break;
+    case 4 : bitzdec32((uint32_t *)in, n/4, 0);break;
+    case 8 : bitzdec64((uint64_t *)in, n/8, 0);break;
     default: bitzdec8( in, n/1, 0);break;
   }
 }

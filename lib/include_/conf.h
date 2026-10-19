@@ -362,6 +362,7 @@ struct _PACKED doubleu   { double             d; };
 
 //--- NDEBUG -------
 #include <stdio.h>
+#include <stdlib.h>   /* AS() calls exit(); conf.h declared neither */
   #ifdef _MSC_VER
     #ifdef NDEBUG
 #define AS(expr, fmt, ...)

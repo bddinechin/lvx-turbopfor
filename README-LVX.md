@@ -27,13 +27,35 @@ the scheduler issues the two halves well. Upstream ships 128-bit *and* 256-bit
 implementations of the same codec, macro-selected, which makes that a
 one-variable A/B rather than a guess.
 
-## Porting cost: two lines
+## Porting cost: three edits, none of them LVX-specific in nature
 
     lib/include_/conf.h  @228, @246   add `defined(__lvx__)` to the
                                       direct-cast unaligned-access branch
+    lib/include_/conf.h               #include <stdlib.h>
+    lib/bitutil.c                     12 pointer casts in four dispatchers
 
 LVX performs unaligned scalar loads in a single instruction (`ld`, `lwz`), so it
-belongs with x86 and RISC-V rather than with the ARM packed-struct branch.
+belongs with x86 and RISC-V rather than with the ARM packed-struct branch. That
+is the only edit that is about this target.
+
+The other two are **modern-compiler strictness, not LVX**, and upstream will
+hit both on any GCC 14 or newer:
+
+- `conf.h`'s `AS()` assert macro calls `exit()` and `fprintf()` while including
+  neither `<stdlib.h>` nor `<stdio.h>` on that path. Under `-ffreestanding` the
+  implicit declaration is an error rather than a warning.
+- `bitxenc`/`bitxdec`/`bitzenc`/`bitzdec` are generic dispatchers taking
+  `unsigned char *` and calling the typed `*16`/`*32`/`*64` entry points with
+  it. `-Wincompatible-pointer-types` became an **error** by default in GCC 14,
+  and lvx-gcc is GCC 17. The casts preserve upstream's evident intent (these are
+  deliberate reinterpretations, and the library relies on unaligned access
+  throughout) without changing behaviour on any target.
+
+Upstream's `UA_MEMCPY` escape hatch — which would have meant *zero* source
+changes — **is broken upstream**, also independently of LVX: it defines `stou*`
+as `memcpy` calls while `lib/include_/vlcbyte.h` uses them as assignment
+targets, so it fails with "lvalue required as left operand of assignment".
+Worth knowing before reaching for it.
 
 Upstream's `UA_MEMCPY` escape hatch — which would have meant *zero* source
 changes — **is broken upstream**, independently of LVX: it defines `stou*` as
@@ -66,56 +88,69 @@ there documents `git clone --recurse-submodules`. `master` retains upstream's
 `.gitmodules` unchanged, so nothing is lost. (Upstream's version also lists
 `Turbo-Range-Coder` twice under one path.)
 
-## What builds today
+## What builds today: all of it
 
-Measured on lvx-2 at `-O2`, lvx-gcc `127ff2d12aa`:
+Measured on lvx-2, lvx-gcc `ddb027f279a`:
 
 | file | role | `-O2` |
 |---|---|---|
-| `lib/bitunpack.c` | **decode** — the hot path | **ok** |
-| `lib/vint.c` | variable-byte integers | ok |
+| `lib/bitpack.c` | encode | **ok** (also `-O3`, `-Os`) |
+| `lib/bitunpack.c` | decode — the hot path | **ok** |
+| `lib/bitutil.c` | delta/zigzag helpers | **ok** |
+| `lib/vint.c` | variable-byte integers | **ok** |
 | `lib/vsimple.c` | SIMPLE-family codecs | ok |
-| `lib/transpose.c` | byte transpose | ok, but scoped out above (permute-bound) |
-| `lib/bitpack.c` | **encode** | **ICE** — see below |
-| `lib/bitutil.c` | delta/zigzag helpers | compile error, `bitxenc1*` argument type — ordinary bug, not an ICE, not yet investigated |
+| `lib/transpose.c` | byte transpose | builds, but scoped out above (permute-bound) |
 
-So **the decode side is usable now**: a `bitunpack` benchmark at `-O2` needs
-nothing from the compiler team. The encode side waits on the ICE. That is the
-right order anyway — decompression is the operation these codecs exist to make
-fast, and it is what an inverted-index or time-series reader actually runs.
+## The lvx-gcc ICE this port found, and what it left behind
 
-## Known blocker on the encode side: an lvx-gcc ICE at -O2
+First compiling `lib/bitpack.c` ICEd the back end before anything had been
+measured:
 
-`lib/bitpack.c` **ICEs the LVX back end** at `-O2` on lvx-2:
-
-    lib/bitpack_.h: In function 'bitxpack16_16':
-    error: unrecognizable insn:
-    (insn ... (set (reg:TI 655)
+    lib/bitpack_.h: In function 'bitxpack16_16'
+    error: unrecognizable insn:  (set (reg:TI 655)
         (ashift:TI (mem:TI (plus:DI (reg/v/f:DI 522 [ in ]) (const_int 48)))
-                   (const_int 16))))
-    during RTL pass: vregs
-    internal compiler error: in extract_insn, at recog.cc:2894
+                   (const_int 16)))
+    during RTL pass: vregs — internal compiler error: in extract_insn, at recog.cc:2894
 
-A 128-bit shift with a *memory* operand. LVX has `sllq`, so the operation
-exists; the pattern evidently wants a register and nothing forced the vector
-load into one, and the insn reaches `vregs` never having been validated.
+**Fixed in lvx-gcc `ddb027f279a`.** The cause, from the session that fixed it:
+`lvx_expand_vector_shift` routes a 128-bit vector shift by a non-word count
+through the TImode view — one `SLLQ`/`SRLQ` instead of four word-at-a-time
+instructions — by taking `simplify_gen_subreg (TImode, …)` of source and target
+and calling `gen_ashlti3`/`gen_lshrti3` directly. A `simplify_gen_subreg` of a
+MEM gives back a MEM, and `gen_*` checks no predicate, so the `mem:TI` reached
+`recog` unmatched. The rotate pair a few thousand lines down had the same bug,
+unhit. Sources are now forced into registers.
 
-    lvx-2 -O0/-O1   ok
-    lvx-2 -O2       ICE          an optimisation pass builds the bad insn
-    lvx-1 -O2       ok           lvx-2 only
+**Two things worth keeping from how it was found.**
 
-Handed to the `lvx-csw` session on 2026-10-19 as compiler work. It blocks
-`bitpack.c` only — everything in the table above still builds at `-O2`, so this
-delays the encode row and nothing else. `-O1` does build `bitpack.c`, but a
-`-O1` figure is not a performance result worth tracking next to `-O2` ones, so
-the harness should refuse to record one rather than quietly report it.
+It needed this input and could not be minimised. Three reductions of mine and
+four of theirs all compiled clean, because the trigger is *operand provenance* —
+the shift's source has to arrive as memory, which happens when the vectorizer
+feeds a memory operand straight into `vec_shr`/`vec_shl`, and the vectorizer is
+the only producer. 1 MB of macro-unrolled headers is what reaches that path. A
+small reproducer would most likely have missed the bug.
 
-It is worth saying plainly that this benchmark found a compiler bug within
-minutes of first compiling, before measuring anything. That is the second kind
-of value here, alongside the shape coverage: 465 KB and 547 KB of
-macro-unrolled headers in `bitpack_.h` and `bitunpack_.h` exercise the compiler
-itself far harder than hand-written kernels do — relevant to
-`-munfold-inner-loops` and `-munfold-max-insns=`.
+And the fix was scoped, not exhaustive: **140 other direct `emit_insn (gen_…)`
+calls in `lvx.cc` were not audited**, of which five take `simplify_gen_subreg`
+results into patterns wanting `register_operand` —
+`gen_lvx_makedp`, `gen_insvsi`, `gen_lvx_sbmm8dp`, `gen_lvx_catdq`,
+`gen_anddi3`. They are reached only from constant-materialisation paths where
+the operand is a register by construction *today*, which is why they have not
+fired — not a guarantee. **If this benchmark ever produces another
+"unrecognizable insn" naming RTL pass `vregs`, those five are the first place to
+look, and the same fix applies.**
+
+## On the 256-bit question, settled from both sides
+
+The back end independently agrees with the measurement: lvx-gcc *costs* a
+256-bit vector as no gain over a 128-bit one, because a two-half operation is
+`issue lite2` and occupies both ALU slots. So there is nothing to fix and
+nothing to tune — the pairing is as good as a 128-bit machine can do, and the
+`__AVX2__` paths here measure that it stays that way.
+
+`transpose.c`'s permute dependence is likewise not a compiler matter: there is
+no runtime-indexed byte permute in the ISA to emit, so it is an `lvx-mds`
+question alongside `lvx-ssw`'s 14.2× `inter-gather` row.
 
 ## Licensing
 
