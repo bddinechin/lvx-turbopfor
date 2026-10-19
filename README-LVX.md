@@ -66,9 +66,27 @@ there documents `git clone --recurse-submodules`. `master` retains upstream's
 `.gitmodules` unchanged, so nothing is lost. (Upstream's version also lists
 `Turbo-Range-Coder` twice under one path.)
 
-## Known blocker: an lvx-gcc ICE at -O2
+## What builds today
 
-`lib/bitpack.c` currently **ICEs the LVX back end** at `-O2` on lvx-2:
+Measured on lvx-2 at `-O2`, lvx-gcc `127ff2d12aa`:
+
+| file | role | `-O2` |
+|---|---|---|
+| `lib/bitunpack.c` | **decode** — the hot path | **ok** |
+| `lib/vint.c` | variable-byte integers | ok |
+| `lib/vsimple.c` | SIMPLE-family codecs | ok |
+| `lib/transpose.c` | byte transpose | ok, but scoped out above (permute-bound) |
+| `lib/bitpack.c` | **encode** | **ICE** — see below |
+| `lib/bitutil.c` | delta/zigzag helpers | compile error, `bitxenc1*` argument type — ordinary bug, not an ICE, not yet investigated |
+
+So **the decode side is usable now**: a `bitunpack` benchmark at `-O2` needs
+nothing from the compiler team. The encode side waits on the ICE. That is the
+right order anyway — decompression is the operation these codecs exist to make
+fast, and it is what an inverted-index or time-series reader actually runs.
+
+## Known blocker on the encode side: an lvx-gcc ICE at -O2
+
+`lib/bitpack.c` **ICEs the LVX back end** at `-O2` on lvx-2:
 
     lib/bitpack_.h: In function 'bitxpack16_16':
     error: unrecognizable insn:
@@ -86,10 +104,11 @@ load into one, and the insn reaches `vregs` never having been validated.
     lvx-2 -O2       ICE          an optimisation pass builds the bad insn
     lvx-1 -O2       ok           lvx-2 only
 
-Handed to the `lvx-csw` session on 2026-10-19 as compiler work. Until it is
-fixed, `-O1` builds and is the fallback — but note that a `-O1` number is not a
-performance result worth tracking, so the harness should refuse to record one
-rather than quietly report it.
+Handed to the `lvx-csw` session on 2026-10-19 as compiler work. It blocks
+`bitpack.c` only — everything in the table above still builds at `-O2`, so this
+delays the encode row and nothing else. `-O1` does build `bitpack.c`, but a
+`-O1` figure is not a performance result worth tracking next to `-O2` ones, so
+the harness should refuse to record one rather than quietly report it.
 
 It is worth saying plainly that this benchmark found a compiler bug within
 minutes of first compiling, before measuring anything. That is the second kind
