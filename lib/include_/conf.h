@@ -225,7 +225,7 @@ static ALWAYS_INLINE void               stof64(      void *cp, double           
 static ALWAYS_INLINE void               ltou32(unsigned           *x, const void *cp) { memcpy(x, cp, sizeof(*x)); } // ua read into ptr
 static ALWAYS_INLINE void               ltou64(unsigned long long *x, const void *cp) { memcpy(x, cp, sizeof(*x)); }
 
-  #elif defined(IC_ARCH_X86) || defined(IC_ARCH_RISCV) || defined(_MSC_VER) ||\
+  #elif defined(__lvx__) || defined(IC_ARCH_X86) || defined(IC_ARCH_RISCV) || defined(_MSC_VER) ||\
     defined(__powerpc__) || defined(__s390__) ||\
     defined(__ARM_FEATURE_UNALIGNED) || defined(__aarch64__) || defined(__arm__) ||\
     defined(__ARM_ARCH_4__) || defined(__ARM_ARCH_4T__) || \
@@ -243,7 +243,7 @@ static ALWAYS_INLINE void               ltou64(unsigned long long *x, const void
 
 #define ltou32(_px_, _cp_) *(_px_) = *(unsigned *)(_cp_)
 
-    #if defined(IC_ARCH_X86) || defined(IC_ARCH_RISCV) || defined(__powerpc__) || defined(__s390__) || defined(_MSC_VER)
+    #if defined(__lvx__) || defined(IC_ARCH_X86) || defined(IC_ARCH_RISCV) || defined(__powerpc__) || defined(__s390__) || defined(_MSC_VER)
 #define ctou64(_cp_)       (*(uint64_t *)(_cp_))
 #define ctof64(_cp_)       (*(double   *)(_cp_))
 
