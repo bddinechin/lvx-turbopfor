@@ -152,11 +152,97 @@ nothing to tune — the pairing is as good as a 128-bit machine can do, and the
 no runtime-indexed byte permute in the ISA to emit, so it is an `lvx-mds`
 question alongside `lvx-ssw`'s 14.2× `inter-gather` row.
 
+## Results, 2026-10-19, lvx-2 `-O2`, `LVX_CPU=minor`
+
+Cycles per integer decoded, lower better. Encode is hoisted out; only the
+unpack call is timed. Every row round-trip verified.
+
+| config | codec | width | cycles/int | bits/int |
+|---|---|---|---|---|
+| scalar | `bitn` | scalar | 1.668 | 26.07 |
+| sse | `bitn` | scalar | 1.655 | 26.07 |
+| avx2 | `bitn` | scalar | 1.659 | 26.07 |
+| sse | `bitn` | **128v32** | **0.666** | 26.07 |
+| avx2 | `bitn` | **256v32** | **0.482** | 26.05 |
+| scalar | `bitnd` | scalar | 1.779 | 12.10 |
+| sse | `bitnd` | scalar | 1.787 | 12.10 |
+| avx2 | `bitnd` | scalar | 1.780 | 12.10 |
+| sse | `bitnd` | **128v32** | **1.501** | 12.10 |
+| avx2 | `bitnd` | **256v32** | **104.220** | 12.11 |
+
+**The control holds.** The scalar row is the same source through the same
+compiler in all three configs, and it lands at 1.668 / 1.655 / 1.659 and
+1.779 / 1.787 / 1.780 — agreeing to under 1%. That validates the method
+before any SIMD row is read, and it is the reason the rest can be trusted.
+
+### Writing WIDER than the machine pays here, as long as you avoid permutes
+
+`bitn` at 256 bits is **1.38× faster than at 128** (0.482 against 0.666) on a
+machine with **no 256-bit datapath**. That is not a contradiction. A 256-bit
+operation becomes a pair of 128-bit ones, the pair occupies both ALU slots, and
+the surrounding code is effectively unrolled by two — so on a VLIW with slots
+to fill, the emulation buys instruction-level parallelism rather than costing
+it. lvx-gcc's own cost model already rates a 256-bit vector as *no gain* over a
+128-bit one; this says that for straight-line integer work it can be a real
+one.
+
+### Unless the path needs a runtime-indexed permute, and then it is 69× worse
+
+`bitnd` at 256 bits costs **104.220 cycles/int — 69× the 128-bit path and 58×
+plain scalar.** The cause is the gap `lvx-ssw` already priced: the AVX2 delta
+decode uses `_mm256_permutevar8x32_epi32` and `_mm256_permute2x128_si256` for
+its prefix sum, and LVX has **no runtime-indexed permute at all** — only
+structured UZP/ZIP shuffles. SIMDe emulates them, and here the emulation sits
+on every block's critical path.
+
+So this is a second, independent confirmation of the finding behind
+`lvx-ssw`'s `inter-gather` row (14.2× for `_mm_shuffle_epi8`): two different
+algorithms, two different benchmarks, one missing instruction class. Closing it
+is an ISA change in `lvx-mds`; nothing in GCC or SIMDe can move it.
+
+The practical reading for anyone choosing a width on this target: **go wide for
+shift/mask/arithmetic, stay narrow for anything that permutes.** That is a
+conclusion neither row gives alone, and it is why the suite measures both
+codecs rather than one.
+
+### Two smaller things the numbers record
+
+The delta codec gains far less from SIMD than the raw one even at 128 bits
+(1.19× against 2.5×), because its prefix-sum dependency after unpacking does
+not vectorise. Measuring only `bitn` would have overstated SIMD's value on this
+library by roughly double.
+
+`bits_per_int` differs marginally at 256 bits (26.054 against 26.074, 12.105
+against 12.099): the AVX2 path blocks the data slightly differently, so the
+encodings are not byte-identical. The round trip still verifies, so this is a
+legitimate encoding difference rather than a defect — worth knowing before
+reading a 0.1% ratio change as noise or as a bug.
+
 ## Licensing
 
 Upstream is **GPL-2.0** and this fork does not alter that. `lvx-perf` is
 Apache-2.0 WITH LLVM-exception, and carrying a GPL-2.0 submodule alongside is
-the same arrangement as `lvx-mds` in `lvx-csw`. One consequence worth stating:
-code written *into* this repository is GPL-2.0 and **cannot flow back** to
-`lvx-perf` or `lvx-ssw`. Anything meant to be shared between benchmarks has to
-live on the permissive side and be copied in, never the reverse.
+the same arrangement as `lvx-mds` in `lvx-csw`.
+
+**Nothing crosses the boundary in either direction, and the inbound direction
+is the surprising one.** Code written into this repository is GPL-2.0 and
+cannot flow back out — that much is obvious. Less obvious: Apache-2.0 code
+cannot come *in* either, because Apache-2.0's patent and indemnification terms
+are additional restrictions under **GPLv2** specifically. (Apache-2.0 into
+GPLv3 is fine; v2 is the awkward one, and TurboPFor is v2.) The LLVM Exception
+may bear on it, but that is a question for counsel rather than one to decide in
+a commit, so the safe course is no sharing at all.
+
+Three files here are deliberate duplicates of `lvx-ssw` equivalents for that
+reason, each carrying a comment saying so, so that nobody later tidies them
+into a shared location:
+
+| here | duplicates | why not shared |
+|---|---|---|
+| the I/O helpers inside `lvx/tpf-bench.c` | `lvx-ssw/lvx/lvx-io.h` | that file is Apache-2.0 |
+| `lvx/tpf-shim.c` | `lvx-ssw/lvx/lvx-shim.c` | same |
+| the resolver block in `lvx/run-tpf.sh` | `lvx-ssw/lvx/run-lvx.sh` | same |
+
+The `lvx-csw` location itself is **not** duplicated: `lvx/run-tpf.sh` *invokes*
+`lvx-perf`'s `bin/lvx-csw-path` as a program, which is not combining, so there
+is still exactly one resolver.
