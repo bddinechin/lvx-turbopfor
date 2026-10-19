@@ -152,6 +152,49 @@ nothing to tune — the pairing is as good as a 128-bit machine can do, and the
 no runtime-indexed byte permute in the ISA to emit, so it is an `lvx-mds`
 question alongside `lvx-ssw`'s 14.2× `inter-gather` row.
 
+## Why three translation layers and not four: NEON cannot be reached
+
+TurboPFor has NEON paths, and SIMDe's NEON lowering is the layer `lvx-csw`
+validates hardest — 4133 of 4134 subtests across 289 test files, against 1246
+for the whole x86 corpus. A `neon` config was attempted for exactly that reason
+and **cannot work**, for a structural reason rather than a configuration one.
+
+TurboPFor ships **its own SSE-to-NEON emulation layer**:
+`lib/include_/sse_neon.h`, 360 lines defining **111 `_mm_*` names** in terms of
+NEON intrinsics (`vld1q_u8`, `vcombine_u32`, …), pulled in by `bitutil_.h`,
+`transpose.c`, `vsimple.c` and `trled.c` whenever `__ARM_NEON` is set.
+
+So under `__ARM_NEON` there are two emulation layers both claiming `_mm_*`:
+
+- `sse_neon.h` defines `_mm_set_epi8` as a NEON function returning `uint32x4_t`
+- SIMDe defines it as a macro expanding to `simde_mm_set_epi8`, and it arrives
+  unavoidably: SIMDe's own NEON implementation internally includes its x86
+  layer (`simde/arm/neon/qrshl.h` → `x86/avx.h`), which under
+  `SIMDE_ENABLE_NATIVE_ALIASES` publishes the x86 aliases
+
+They collide with `conflicting types for 'simde_mm_set_epi8'`. No combination
+of `SIMDE_*_NO_NATIVE` flags fixes it, because the problem is not native versus
+emulated — it is two emulators competing for the same 111 symbol names, and
+SIMDe's native aliases are all-or-nothing, so its NEON names cannot be taken
+while declining its x86 names.
+
+On real ARM this is the right design: TurboPFor maps SSE to NEON itself and the
+hardware does the rest. On LVX it would have to be SSE → NEON → LVX, two
+stages, and SIMDe cannot be configured to supply only the second.
+
+Two things would change that, neither of them a benchmark change: patching
+`sse_neon.h` out on this branch (surgery on upstream, for a config that would
+then differ from `sse` only in `bitpack.c`'s two `#ifdef __ARM_NEON` blocks),
+or selective aliasing in SIMDe — NEON names without x86 names — which is an
+upstream SIMDe feature.
+
+**The gap this leaves is worth stating plainly: no benchmark in `lvx-perf`
+exercises SIMDe's NEON layer at all.** `lvx-ssw` reaches LVX through SSE2 and
+so does this suite, while the NEON lowering — the most heavily validated one —
+has never been measured for performance. Closing that needs a benchmark written
+against NEON intrinsics directly, not one ported through another project's SSE
+shim.
+
 ## Results, 2026-10-19, lvx-2 `-O2`, `LVX_CPU=minor`
 
 Cycles per integer decoded, lower better. Encode is hoisted out; only the
