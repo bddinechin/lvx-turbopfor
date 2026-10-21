@@ -134,9 +134,9 @@ SIMDE=$CSW/lvx-simde
     echo "       fix:  git -C '$CSW' submodule update --init lvx-simde" >&2; exit 2; }
 
 case $MARCH in
-    lvx-1) GEM5BIN=gem5-lvx1.opt ;;
-    lvx-2) GEM5BIN=gem5-lvx2.opt ;;
-    # Wrong-core runs are SILENT: lvx-2 code under gem5-lvx1.opt does not
+    lvx-1) GEM5BIN=gem5-lvx-1.opt ;;
+    lvx-2) GEM5BIN=gem5-lvx-2.opt ;;
+    # Wrong-core runs are SILENT: lvx-2 code under gem5-lvx-1.opt does not
     # error, it returns wrong answers.
     *) echo "error: unknown MARCH='$MARCH' (lvx-1 or lvx-2)" >&2; exit 2 ;;
 esac
