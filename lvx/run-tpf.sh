@@ -7,6 +7,7 @@
 #   CONFIG=avx2 ./lvx/run-tpf.sh     its 256-bit AVX2 path via SIMDe
 #   MARCH=lvx-1 ./lvx/run-tpf.sh     the scalar core
 #   STATIC_ONLY=1 ./lvx/run-tpf.sh   build + static metrics, no ISS
+#   TMO=0 ./lvx/run-tpf.sh           no ISS time limit (default 3600 s)
 #   ./lvx/run-tpf.sh --native        the x86 reference, same source
 #   ./lvx/run-tpf.sh --csw /path/to/lvx-csw
 #
@@ -225,3 +226,11 @@ LVX_CPU=$LVX_CPU timeout "${TMO:-3600}" \
     "$CSW/lvx-gem5/build/$GEM5BIN" --outdir="$WD/m5out" \
     "$CSW/lvx-gem5/tests/lvx/run_lvx.py" "$WD/tpf.elf" 2>&1 |
     grep -E '^RESULT|^src_checksum|^ok|^FAIL|^MISMATCH|target exited'
+# The grep above drops gem5's last words, so without this a timeout reads as a
+# run that printed nothing and exited with grep's status.
+rc=("${PIPESTATUS[@]}")
+if [ "${rc[0]}" = 124 ]; then
+    echo "TIMEOUT: gem5 killed after ${TMO:-3600} s, no result -- TMO=0 lifts the limit" >&2
+    exit 124
+fi
+exit "${rc[1]}"
