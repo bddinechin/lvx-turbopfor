@@ -60,7 +60,35 @@ outdir="$repo/results"; mkdir -p "$outdir"
 tsv="$outdir/$ARCH-$OPT.tsv"
 work=$(mktemp -d); trap 'rm -rf "$work"' 0 1 2 3 15
 
+# lvx-perf's bin/lvx-rev-stamp owns the provenance columns, and is CALLED and
+# never copied. That matters more here than anywhere: this suite is GPL-2.0 and
+# lvx-perf is Apache-2.0 WITH LLVM-exception, which does not combine into
+# GPLv2 -- copying a helper in was the mistake lvx/lvx-io.h made once.
+# Executing a script is not deriving from it.
+#
+# Per row, not per sweep: a toolchain reinstalled in place midway is the
+# hazard, and a once-per-sweep stamp cannot show it.
+super=$(git -C "$repo" rev-parse --show-superproject-working-tree 2>/dev/null) || super=
+STAMP=
+[ -n "$super" ] && [ -x "$super/bin/lvx-rev-stamp" ] && STAMP="$super/bin/lvx-rev-stamp"
+stamp_cols=(csw_rev gcc_rev gem5_rev cc_mtime)
+stamp_header() {
+    if [ -n "$STAMP" ]; then "$STAMP" --tsv-header
+    else (IFS=$'\t'; printf '%s\n' "${stamp_cols[*]}"); fi
+}
+stamp_row() {
+    if [ -n "$STAMP" ]; then "$STAMP" --tsv-row ${CSW:+--csw "$CSW"}
+    else
+        local u=() c
+        for c in "${stamp_cols[@]}"; do u+=(unknown); done
+        (IFS=$'\t'; printf '%s\n' "${u[*]}")
+    fi
+}
+
 HEADER='config\tcodec\twidth\tarch\topt\tcorrect\tcycles\tints\tpacked_bytes\tbits_per_int\tcycles_per_int\tchecksum\ttext_bytes\tinsns_static\tbundles_static\tsimd_insns\tcompile_seconds\tcpu_model'
+HEADER="$HEADER\t$(stamp_header | sed 's/\t/\\t/g')"
+# The field count the merge below pads carried-over rows up to.
+want_fields=$(printf "$HEADER\n" | awk -F'\t' '{print NF}')
 
 rows="$work/rows.tsv"; : > "$rows"
 printf '%-8s %-6s %-8s %-10s %12s %10s %12s %8s\n' \
@@ -89,8 +117,9 @@ for cfg in $CONFIGS; do
     fi
     if [ "$STATIC_ONLY" = 1 ]; then
         printf '%-8s %-6s %-8s %-10s %12s %10s %12s %8s\n' "$cfg" "-" "-" static - - - "${csec:--}"
-        printf '%s\t-\t-\t%s\t%s\tstatic\t\t\t\t\t\t\t%s\t%s\t%s\t%s\t%s\t\n' \
-               "$cfg" "$ARCH" "$OPT" "${text:-}" "${insns:-}" "${bund:-}" "${simd:-}" "${csec:-}" >> "$rows"
+        printf '%s\t-\t-\t%s\t%s\tstatic\t\t\t\t\t\t\t%s\t%s\t%s\t%s\t%s\t\t%s\n' \
+               "$cfg" "$ARCH" "$OPT" "${text:-}" "${insns:-}" "${bund:-}" "${simd:-}" "${csec:-}" \
+               "$(stamp_row)" >> "$rows"
         continue
     fi
 
@@ -116,10 +145,10 @@ for cfg in $CONFIGS; do
         correct=ok
         printf '%-8s %-6s %-8s %-10s %12s %10s %12s %8s\n' \
                "$cfg" "$codec" "$width" "$correct" "$cyc" "$cpi" "$bpi" "${csec:--}"
-        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
                "$cfg" "$codec" "$width" "$ARCH" "$OPT" "$correct" "$cyc" "$ints" \
                "$pb" "$bpi" "$cpi" "$cks" "${text:-}" "${insns:-}" "${bund:-}" \
-               "${simd:-}" "${csec:-}" "${cpu:-}" >> "$rows"
+               "${simd:-}" "${csec:-}" "${cpu:-}" "$(stamp_row)" >> "$rows"
     done < <(grep '^RESULT' "$log")
 done
 
@@ -129,9 +158,14 @@ done
 merged="$work/merged.tsv"
 printf "$HEADER\n" > "$merged"
 if [ -f "$tsv" ]; then
-    awk -F'\t' -v keep="$(echo $CONFIGS | tr ' ' '|')" '
+    awk -F'\t' -v OFS='\t' -v keep="$(echo $CONFIGS | tr ' ' '|')" \
+        -v want="$want_fields" '
         NR==1 && $1=="config" {next}
-        { n=split(keep,k,"|"); for(i=1;i<=n;i++) if ($1==k[i]) next; print }
+        { n=split(keep,k,"|"); for(i=1;i<=n;i++) if ($1==k[i]) next
+          # Pad a row written before the provenance columns existed, so a
+          # single-config re-run cannot leave the file ragged.
+          for (i = NF + 1; i <= want; i++) $i = ""
+          print }
     ' "$tsv" >> "$merged"
 fi
 cat "$rows" >> "$merged"
