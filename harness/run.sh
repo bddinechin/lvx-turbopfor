@@ -6,6 +6,8 @@
 #   CONFIG=sse ./harness/run.sh           # just one
 #   ARCH=lvx-1 ./harness/run.sh
 #   STATIC_ONLY=1 ./harness/run.sh        # build + static metrics, no ISS
+#   LVX_EXTRA_CFLAGS='-mcms-probe' ./harness/run.sh   # CROSS-only extra flags
+#                                         (never reaches the x86 oracle)
 #   ./harness/run.sh --csw /path/to/lvx-csw
 #   ./harness/compare.sh results/A.tsv results/B.tsv
 #

@@ -120,7 +120,12 @@ if [ "${1:-}" = "--native" ]; then
     # collide with the host's libc.
     nsrc=$(printf '%s\n' $SRCS | grep -v tpf-shim | tr '\n' ' ')
     # shellcheck disable=SC2086
-    cc -$OPT $nflags $CFG_CF -I"$HERE" -w -o /tmp/tpf-native-$CONFIG $nsrc || exit 1
+    # -lm: bitutil.c's fprazor32/fprazor64 call log(). The target link gets
+    # its maths from newlib, so this path was the only one missing it and
+    # --native had never linked. Found by probing LVX_EXTRA_CFLAGS: the
+    # native arm failed with and without the flag, which is how a
+    # pre-existing break looks exactly like a leak.
+    cc -$OPT $nflags $CFG_CF -I"$HERE" -w -o /tmp/tpf-native-$CONFIG $nsrc -lm || exit 1
     exec /tmp/tpf-native-$CONFIG
 fi
 
@@ -159,6 +164,18 @@ CF="$CF -DSIMDE_ENABLE_NATIVE_ALIASES -ffreestanding -fno-strict-aliasing -w"
 # collection removes the cause rather than the symptoms, and shrinks the image
 # besides.
 CF="$CF -ffunction-sections -fdata-sections"
+
+# LVX_EXTRA_CFLAGS: extra flags for the CROSS compile only.
+#
+# It is appended last so it overrides the defaults above, and it is placed
+# here, after the --native branch has already exec'd, so it structurally
+# cannot reach the x86 oracle. That separation is the whole point: an
+# LVX-only flag like -mcms-probe would fail the host build outright, and a
+# flag that silently changed the oracle would invalidate the checksums the
+# oracle exists to provide. lvx-csw's validation/cms/gate.sh hit the mirror
+# of this and had to add a separate GATE_EXTRA knob after a measurement was
+# believed that had tested the default.
+CF="$CF ${LVX_EXTRA_CFLAGS:-}"
 
 echo "== $CONFIG $MARCH -$OPT =="
 t0=$SECONDS
