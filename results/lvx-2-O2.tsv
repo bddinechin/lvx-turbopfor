@@ -1,11 +1,11 @@
-config	codec	width	arch	opt	correct	cycles	ints	packed_bytes	bits_per_int	cycles_per_int	checksum	text_bytes	insns_static	bundles_static	simd_insns	compile_seconds	cpu_model
-scalar	bitnd	scalar	lvx-2	O2	ok	116631	65536	99121	12.099	1.779	3910032422	100964	23746	10131	125	108	minor
-scalar	bitn	scalar	lvx-2	O2	ok	109379	65536	213600	26.074	1.668	3910032422	100964	23746	10131	125	108	minor
-sse	bitn	128v32	lvx-2	O2	ok	43656	65536	213600	26.074	0.666	3910032422	353496	77694	34189	9537	569	minor
-sse	bitnd	128v32	lvx-2	O2	ok	98394	65536	99121	12.099	1.501	3910032422	353496	77694	34189	9537	569	minor
-sse	bitnd	scalar	lvx-2	O2	ok	117137	65536	99121	12.099	1.787	3910032422	353496	77694	34189	9537	569	minor
-sse	bitn	scalar	lvx-2	O2	ok	108518	65536	213600	26.074	1.655	3910032422	353496	77694	34189	9537	569	minor
-avx2	bitn	256v32	lvx-2	O2	ok	31635	65536	213440	26.054	0.482	3910032422	903156	195467	81767	24002	1816	minor
-avx2	bitnd	256v32	lvx-2	O2	ok	6830221	65536	99169	12.105	104.220	3910032422	903156	195467	81767	24002	1816	minor
-avx2	bitnd	scalar	lvx-2	O2	ok	116674	65536	99121	12.099	1.780	3910032422	903156	195467	81767	24002	1816	minor
-avx2	bitn	scalar	lvx-2	O2	ok	108754	65536	213600	26.074	1.659	3910032422	903156	195467	81767	24002	1816	minor
+config	codec	width	arch	opt	correct	cycles	ints	packed_bytes	bits_per_int	cycles_per_int	checksum	text_bytes	insns_static	bundles_static	simd_insns	compile_seconds	cpu_model	csw_rev	gcc_rev	gem5_rev	cc_mtime
+scalar	bitnd	scalar	lvx-2	O2	ok	339318	65536	99121	12.099	5.177src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		100964	23746	10130	125	107	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+scalar	bitn	scalar	lvx-2	O2	ok	334540	65536	213600	26.074	5.104src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		100964	23746	10130	125	107	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+sse	bitn	128v32	lvx-2	O2	ok	360121	65536	213600	26.074	5.495src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		353496	77694	34188	9537	615	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+sse	bitnd	128v32	lvx-2	O2	ok	241157	65536	99121	12.099	3.679src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		353496	77694	34188	9537	615	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+sse	bitnd	scalar	lvx-2	O2	ok	339563	65536	99121	12.099	5.181src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		353496	77694	34188	9537	615	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+sse	bitn	scalar	lvx-2	O2	ok	336025	65536	213600	26.074	5.127src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		353496	77694	34188	9537	615	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+avx2	bitn	256v32	lvx-2	O2	ok	298043	65536	213440	26.054	4.547src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		903156	195467	81758	24002	2060	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+avx2	bitnd	256v32	lvx-2	O2	ok	6873787	65536	99169	12.105	104.885src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		903156	195467	81758	24002	2060	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+avx2	bitnd	scalar	lvx-2	O2	ok	238215	65536	99121	12.099	3.634src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		903156	195467	81758	24002	2060	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
+avx2	bitn	scalar	lvx-2	O2	ok	449627	65536	213600	26.074	6.860src/cpu/minor/buffers.hh:439: warn: system.cpu.execute.inFlightInsts0: No space to push data into queue of capacity 640, pushing anyway		903156	195467	81758	24002	2060	minor	9bb45ab	ddb90ae5f68	81c61f43f8	2026-11-02T15:23:26
